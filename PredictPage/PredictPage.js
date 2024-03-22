@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, Button, Image, StyleSheet, Modal } from 'react-native';
+import { View, Text, Button, Image, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { ImageManipulator } from 'expo-image-manipulator';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 // const API_ENDPOINT = 'http://10.0.2.2:3000/api/predict'; //localhost
-const API_ENDPOINT = 'https://skin-disease-detect-c718686d99c6.herokuapp.com/api/predict'; //hosting server
+const API_ENDPOINT = 'https://skin-disease-detect-c718686d99c6.herokuapp.com/api/predict'; //heroku hosting server
 
 const PictureSelectPage = () => {
   const [modalVisible, setModalVisible] = useState(false);
+  const [indicatorVisible, setIndicatorVisible] = useState(false);
+  const [apiRes, setApiRes] = useState(false);
+
   const [selectedImageUri, setSelectedImageUri] = useState();
   const [selectedImageName, setSelectedImageName] = useState();
   const [selectedImageType, setSelectedImageType] = useState();
@@ -25,17 +28,36 @@ const PictureSelectPage = () => {
     if (pickerResult.cancelled === true) {
       return console.log("Cancelled");
     }
+    const originalWidth = pickerResult.assets[0].width;
+    const originalHeight = pickerResult.assets[0].height;
+    const targetSize = 200;
+    let newWidth, newHeight;
+    if (originalWidth > originalHeight) {
+      newWidth = targetSize;
+      newHeight = Math.floor((originalHeight / originalWidth) * targetSize);
+    } else {
+      newHeight = targetSize;
+      newWidth = Math.floor((originalWidth / originalHeight) * targetSize);
+    }
+
     const resizedImage = await ImageManipulator.manipulateAsync(
       pickerResult.assets[0].uri,
-      [{ resize: { width: 300, height: 500 } }],
-      { compress: 0.7, format: 'jpg' } // optional compression and format settings
+      [{ resize: { 
+        width: newWidth, 
+        height: newHeight, 
+       }}],
+      { compress: 0.7, format: 'jpeg' } // optional compression and format settings
     );
+    console.log(pickerResult)
 
     setSelectedImageUri(resizedImage.uri);
     setSelectedImageName(pickerResult.assets[0].fileName);
-    setSelectedImageType("image/jpg");
+    setSelectedImageType("image/jpeg");
     console.log(selectedImageUri, selectedImageName, selectedImageType);
   };
+  console.log(selectedImageUri, selectedImageName, selectedImageType);
+
+  
 
   const callApiHandler = async () => {
     console.log(selectedImageUri, selectedImageName, selectedImageType);
@@ -44,6 +66,8 @@ const PictureSelectPage = () => {
       return;
     }
     try {
+      setModalVisible(true)
+      setIndicatorVisible(true)
       const formRequest = new FormData();
       formRequest.append('inputImage', {
         uri: selectedImageUri,
@@ -58,8 +82,13 @@ const PictureSelectPage = () => {
         headers: { "Content-Type": "multipart/form-data" },
       })
       console.log('API response:', response.data.class);
+      setPredict(response.data.class);
+      setProb(response.data.prob.toFixed(2));
+      setApiRes(true);
+      setIndicatorVisible(false)
     } catch (error) {
       console.error('Error calling API:', error);
+      setApiRes(false);
     }
   };
 
@@ -84,10 +113,20 @@ const PictureSelectPage = () => {
           setModalVisible(!modalVisible);
         }}
       >
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <View style={{ backgroundColor: 'white', padding: 20, borderRadius: 10 }}>
-            <Text>Prediction</Text>
-            <Button title="Close Modal" onPress={() => setModalVisible(false)} />
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>Prediction</Text>
+            {indicatorVisible && (
+              <ActivityIndicator size="large" color="#00ff00" />
+              )
+            }
+            {apiRes && (
+              <>
+                <Text>Image is of class {predict} with a probability of {prob} %</Text>
+                <Button title="Close Modal" onPress={() => {setModalVisible(false); setApiRes(false)}} />
+              </>
+              )
+            }
           </View>
         </View>
       </Modal>
@@ -106,15 +145,33 @@ const styles = StyleSheet.create({
     marginTop: 100,
   },
   imageContainer: {
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   image: {
     borderRadius: 15,
-    width: 300,
-    height: 500,
+    width: 250,
+    height: 400,
     resizeMode: 'contain',
     marginBottom: 10,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalText: {
+    marginBottom: 10,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
